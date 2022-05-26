@@ -1,3 +1,4 @@
+from distutils.log import error
 import numpy as np
 
 import sqlalchemy
@@ -42,8 +43,8 @@ def welcome():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end>"
+        f"/api/v1.0/YYYY-MM-DD  startdate<br/>"
+        f"/api/v1.0/YYYY-MM-DD/YYYY-MM-DD range start-end"
     )
 
 
@@ -52,8 +53,8 @@ def prcp():
     # Create our session (link) from Python to the DB
     session = Session(engine)
 
-    """Return a list of all passenger names"""
-    # Query all passengers
+    """Return a list of all measurement dates"""
+    # Query all measurement
     results = session.query(Measurement.date,Measurement.prcp).all()
 
     session.close()
@@ -63,12 +64,7 @@ def prcp():
         prcp_dct = {
             date: prcp
         }
-        #prcp_dct['date'] = date
-        #prcp_dct['prcp'] = prcp
         all_prcp.append(prcp_dct)
-
-    # Convert list of tuples into normal list
-    #all_names = list(np.ravel(results))
 
     return jsonify(all_prcp)
 
@@ -78,8 +74,7 @@ def names():
     # Create our session (link) from Python to the DB
     session = Session(engine)
 
-    """Return a list of passenger data including the name, age, and sex of each passenger"""
-    # Query all passengers
+    # Query all station
     results = session.query(Station.station).all()
 
     session.close()
@@ -117,10 +112,83 @@ def tobs():
         }
         all_tobs.append(tobs_dct)
 
-    # Convert list of tuples into normal list
-    #all_names = list(np.ravel(results))
-
     return jsonify(all_tobs)
+
+@app.route("/api/v1.0/<start>")
+def measurement_by_date(start):
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    #Set our Start date from inputs
+    start  = datetime.strptime(start, '%Y-%m-%d')
+
+    # Query the MIN,MAX and Average
+    TMIN = session.query(func.min(Measurement.tobs)).\
+    filter(Measurement.date >= start).scalar()
+
+    TMAX = session.query(func.max(Measurement.tobs)).\
+    filter(Measurement.date >= start).scalar()
+
+    TAVG = session.query(func.avg(Measurement.tobs)).\
+    filter(Measurement.date >= start).scalar()
+    TAVG = round(TAVG,2)
+
+    session.close()
+
+    all_tobs = []
+
+    dict_ = {}
+    dict_['StartDate'] = start
+    dict_['TMIN'] = TMIN
+    dict_['TMAX'] = TMAX
+    dict_['TAVG'] = TAVG
+
+    all_tobs.append(dict_)
+
+    try:
+        return jsonify(all_tobs)
+    except ValueError:
+        return jsonify({"error": "Date not found."}), 404
+
+@app.route("/api/v1.0/<start>/<end>")
+def measurement_by_date_start_end(start,end):
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+
+    print(start, end)
+
+    #Set our Start and end date from inputs
+    start  = datetime.strptime(start, '%Y-%m-%d')
+    end  = datetime.strptime(end, '%Y-%m-%d')
+
+    #QUery minimum temperature, the average temperature, and the max temperature for a given start or start-end range.
+    TMIN = session.query(func.min(Measurement.tobs)).\
+    filter(Measurement.date <= end, Measurement.date >= start).scalar()
+
+    TMAX = session.query(func.max(Measurement.tobs)).\
+    filter(Measurement.date >= start, Measurement.date <= end).scalar()
+
+    TAVG = session.query(func.avg(Measurement.tobs)).\
+    filter(Measurement.date >= start, Measurement.date <= end).scalar()
+    TAVG = round(TAVG,2)
+
+    session.close()
+
+    all_tobs = []
+
+    dict_ = {}
+    dict_['StartDate'] = start
+    dict_['EndDate'] = end
+    dict_['TMIN'] = TMIN
+    dict_['TMAX'] = TMAX
+    dict_['TAVG'] = TAVG
+
+    all_tobs.append(dict_)
+
+    try:
+        return jsonify(all_tobs)
+    except ValueError:
+        return jsonify({"error": "Date not found."}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
